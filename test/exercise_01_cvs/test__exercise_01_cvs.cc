@@ -1,4 +1,5 @@
 #include <atomic>
+#include <condition_variable>
 #include <iostream>
 #include <mutex>
 #include <queue>
@@ -10,6 +11,7 @@
 using namespace std;
 
 void produce (
+  std::condition_variable & cv,
   size_t               id,
   std::mutex         & cout_mutex,
   std::mutex         & producer_mutex,
@@ -39,12 +41,14 @@ void produce (
     }
 
     queue.push(msec);
+    cv.notify_one();
 
     num_produced++;
   }
 }
 
 void consume (
+  std::condition_variable & cv,
   size_t               id,
   std::mutex         & cout_mutex,
   std::mutex         & producer_mutex,
@@ -54,14 +58,14 @@ void consume (
   std::atomic_bool   & done,
   std::atomic_size_t & num_consumed)
 {
-  while (!done)
+  while (true)
   {
     if (!queue.empty())
     {
       size_t msec = queue.front();
       queue.pop();
       {
-        lock_guard lg(cout_mutex);
+        std::unique_lock<std::mutex> lg(cout_mutex);
         cout << "C" << id << ": popped " << msec << endl;
         cout << "C" << id << ": working..." << endl;
       }
@@ -71,15 +75,16 @@ void consume (
     else
     {
       {
-        lock_guard lg(cout_mutex);
+        std::unique_lock<std::mutex> lg(cout_mutex);
         //cout << "C" << id << ": waiting..." << endl; // LINE A
+        cv.wait(lg);
       }
       this_thread::sleep_for(chrono::milliseconds(10));
     }
   }
 
   {
-    lock_guard lg(cout_mutex);
+    std::unique_lock<std::mutex> lg(cout_mutex);
     cout << "C" << id << ": exiting..." << endl;
   }
 }
@@ -96,10 +101,11 @@ TEST_CASE("producer/consumer example")
 
   std::queue<size_t> q;
   std::mutex         q_m;
+  std::condition_variable cv;
 
-  std::atomic_size_t N_produced = 0;
-  std::atomic_size_t N_consumed = 0;
-  std::atomic_bool   done       = false;
+  std::atomic_size_t      N_produced = 0;
+  std::atomic_size_t      N_consumed = 0;
+  std::atomic_bool        done       = false;
 
   cout << "main: starting consumers" << endl;
   vector<thread> consumers;
@@ -107,13 +113,14 @@ TEST_CASE("producer/consumer example")
   {
     consumers.emplace_back(
       consume,
+      ref(cv),
       idx,
       ref(cout_m),
       ref(producer_m),
       ref(consumer_m),
       ref(q),
       ref(q_m),
-      ref(done),
+      ref(done), // At this point done = false
       ref(N_consumed)
     );
   }
@@ -124,6 +131,7 @@ TEST_CASE("producer/consumer example")
   {
     producers.emplace_back(
       produce,
+      ref(cv),
       idx,
       ref(cout_m),
       ref(producer_m),

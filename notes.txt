@@ -1,0 +1,30 @@
+1. Why is the test failing?  
+- The test is failing because the amount of numbers produced does not equal the amount of numbers consumed.
+
+2. What do you suspect is the root cause of the failure?  
+- The consumer threads are not communicating to the producers that
+they are done consuming. So, the producers have no idea the rate/speed the consumers can handle.
+
+3. Why does the main thread join() the producers before setting done = true?
+- This allows the producer threads to finish executing before done is set to true. 
+- This pauses the consumer and main threads execution.
+
+Uncomment LINE A and run the code.  What changes in the output?
+- The consumers now poll.
+
+Should the condition variable be passed by value or by reference?  
+- By reference. 
+
+Why?
+- We have to pass by reference. The other threads need to know that the state of the condition variable 
+which means we need to update the original.
+
+Modify the producer code to correctly use the condition variable to notify a consumer each time it inserts an item into the queue.  Rerun the test.
+Does the test pass? If so, why?  If not, why not?
+- No, the producer threads does not notify the consumer thread. 
+
+Update the consumer code to correctly use the condition variable to avoid busy waiting.
+Does the test pass?  If not, can you spot any logic errors in the consumer that would prevent all the items in the queue from being processed?  Fix them.
+
+- No, the test does not pass.
+
